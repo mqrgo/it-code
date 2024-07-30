@@ -2,8 +2,8 @@ from datetime import datetime
 
 from django.shortcuts import render
 from django.http import HttpResponse
-from django.db.models import Q, Min, Max, Avg, Count, F, Sum
-from models_and_fields import models
+from django.db.models import Q, Min, Max, Avg, Count, F, Sum, Prefetch
+from qrsts import models
 
 
 def index(request):
@@ -50,4 +50,25 @@ def index(request):
     high_rating_authors_count = models.Author.objects.filter(total_rating__gt=8).aggregate(Count('id'))
     total_age_sum = models.Author.objects.aggregate(Sum('age'))
 
-    return HttpResponse(f'{icontains}')
+    #Annotate aggrigate alias
+    author_qs_with_books_count = models.Author.objects.annotate(num_books=Count('book')) # для сохранения рез-ов вычислений в qs
+    avg_rating = models.Author.objects.aggregate(avg_authors_rating=Avg('total_rating')) # для сохранения результата вычисления
+    alias_filter = models.Author.objects.alias(avg_rating=Avg('total_rating').filter(total_rating__lte=F('avg_rating'))) #результат вычисления хранится до момента вычисления кверисета
+
+    #Union Intersection Difference
+    qs1 = models.Author.objects.filter(first_name__startswith='Л')
+    qs2 = models.Author.objects.filter(first_name__startswith='Ю')
+    result1 = qs1.union(qs2) # объединяет значение исключая дубликаты
+    result2 = qs1.intersection(qs2) # оставляет результатом пересечение кверисетов
+    result3 = qs1.difference(qs2) # оставляет только те объекты, которые присутствуют в первом но и отсутствуют во втором
+
+    #select_related prefetch_related
+    books = models.Book.objects.select_related('author').all() # для получения связанных объектов в 1to1 1toMany(со стороны many)
+    authors = models.Author.objects.prefetch_related('book').all() # для получения связанных объектов в ManyToMany 1toMany(со стороны 1)
+    genres_with_books = models.Genre.objects.prefetch_related(Prefetch('books', to_attr='books_set'))
+
+    books_qs = models.Book.objects.filter(title__startswith='Л')
+    genres_with_books_special_qs = models.Genre.objects.prefetch_related(Prefetch('books', queryset=books_qs, to_attr='books_set'))
+
+
+    return HttpResponse()
